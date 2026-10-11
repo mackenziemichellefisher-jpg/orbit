@@ -1,0 +1,3 @@
+[functions.parse-link]
+verify_jwt = false
+entrypoint = "./functions/parse-link/index.ts"
