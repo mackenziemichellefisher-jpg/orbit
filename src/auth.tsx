@@ -9,11 +9,31 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>;
   signUp: (email: string, password: string) => Promise<{ error: string | null; needsConfirmation: boolean }>;
   signInWithProvider: (provider: "google" | "apple") => Promise<{ error: string | null }>;
+  sendPhoneCode: (phone: string) => Promise<{ error: string | null }>;
+  verifyPhoneCode: (phone: string, code: string) => Promise<{ error: string | null }>;
   resetPassword: (email: string) => Promise<{ error: string | null }>;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+/** Turns what people type into E.164 (+15551234567). Ten-digit numbers are assumed to be US/Canada. */
+export function normalizePhone(input: string): string | null {
+  const trimmed = input.trim();
+  const digits = trimmed.replace(/\D/g, "");
+  if (trimmed.startsWith("+")) return digits.length >= 8 && digits.length <= 15 ? `+${digits}` : null;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return null;
+}
+
+function messageForPhoneError(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("expired") || message.includes("invalid")) return "That code didn't work. Check it or send a new one.";
+  if (message.includes("rate limit") || message.includes("security purposes")) return "Please wait a minute before requesting another code.";
+  if (message.includes("phone provider") || message.includes("unsupported phone") || message.includes("sms")) return "Phone sign-in isn't available right now. Try email or Google.";
+  return "We couldn't send a code to that number. Check it and try again.";
+}
 
 function messageForError(error: unknown): string {
   if (!(error instanceof Error)) return "Something went wrong. Please try again.";
@@ -69,11 +89,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     },
     async signInWithProvider(provider) {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider,
-        options: { redirectTo: window.location.origin },
-      });
-      return { error: error ? messageForError(error) : null };
+      try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider,
+          options: { redirectTo: window.location.origin },
+        });
+        if (!error) return { error: null };
+        const label = provider === "google" ? "Google" : "Apple";
+        return { error: error.message.toLowerCase().includes("not enabled") ? `${label} sign-in isn't available yet.` : messageForError(error) };
+      } catch (cause) {
+        return { error: messageForError(cause) };
+      }
+    },
+    async sendPhoneCode(phone) {
+      try {
+        const { error } = await supabase.auth.signInWithOtp({ phone });
+        return { error: error ? messageForPhoneError(error) : null };
+      } catch (cause) {
+        return { error: messageForPhoneError(cause) };
+      }
+    },
+    async verifyPhoneCode(phone, code) {
+      try {
+        const { error } = await supabase.auth.verifyOtp({ phone, token: code.trim(), type: "sms" });
+        return { error: error ? messageForPhoneError(error) : null };
+      } catch (cause) {
+        return { error: messageForPhoneError(cause) };
+      }
     },
     async resetPassword(email) {
       const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {

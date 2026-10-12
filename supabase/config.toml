@@ -1,3 +1,55 @@
 [functions.parse-link]
 verify_jwt = false
 entrypoint = "./functions/parse-link/index.ts"
+
+[auth]
+enabled = true
+site_url = "http://127.0.0.1:5173"
+additional_redirect_urls = [
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5174",
+  "http://127.0.0.1:5175",
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+]
+enable_signup = true
+minimum_password_length = 6
+
+[auth.mfa.totp]
+enroll_enabled = true
+verify_enabled = true
+
+[auth.email]
+enable_signup = true
+double_confirm_changes = true
+enable_confirmations = false
+secure_password_change = false
+
+[auth.sms]
+enable_signup = true
+enable_confirmations = false
+template = "Your code is {{ .Code }}"
+
+# Twilio sends the one-time codes for phone sign-in.
+# Values come from supabase/.env (see supabase/.env.example).
+[auth.sms.twilio]
+enabled = true
+account_sid = "env(SUPABASE_AUTH_SMS_TWILIO_ACCOUNT_SID)"
+message_service_sid = "env(SUPABASE_AUTH_SMS_TWILIO_MESSAGE_SERVICE_SID)"
+auth_token = "env(SUPABASE_AUTH_SMS_TWILIO_AUTH_TOKEN)"
+
+# Test number that skips Twilio and always accepts this code.
+[auth.sms.test_otp]
+4152127777 = "123456"
+
+[auth.external.google]
+enabled = true
+client_id = "301018451331-8nqo49rv5g0dqalooi1bj37nba5ogqov.apps.googleusercontent.com"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+skip_nonce_check = false
+
+[auth.external.apple]
+enabled = false
+client_id = ""
+secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
